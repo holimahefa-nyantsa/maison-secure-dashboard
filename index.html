@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Interphone Maison - Visioconférence</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { display: flex; gap: 20px; width: 100%; max-width: 900px; justify-content: center; }
+        .sidebar { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 250px; }
+        .video-box { display: flex; flex-direction: column; gap: 15px; }
+        video { width: 350px; height: 250px; background: #000; border-radius: 8px; border: 2px solid #ccc; }
+        ul { list-style: none; padding: 0; }
+        li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+        button { border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; color: white; }
+        .btn-audio { background: #28a745; }
+        .btn-video { background: #007bff; }
+        .btn-hangup { background: #dc3545; margin-top: 10px; width: 100%; }
+        #status { font-weight: bold; margin-bottom: 15px; color: #555; }
+    </style>
+</head>
+<body>
+
+    <h1>Interphone - <span id="myRoomName"></span></h1>
+    <div id="status">Statut : Connexion...</div>
+
+    <div class="container">
+        <!-- Liste dynamique des clients connectés -->
+        <div class="sidebar">
+            <h3>Appareils en ligne</h3>
+            <ul id="clientsList">
+                <li>Recherche...</li>
+            </ul>
+        </div>
+
+        <!-- Flux vidéos -->
+        <div class="video-box">
+            <div>
+                <h4>Ma Caméra</h4>
+                <video id="localVideo" autoplay muted playsinline></video>
+            </div>
+            <div>
+                <h4>Correspondant</h4>
+                <video id="remoteVideo" autoplay playsinline></video>
+                <button class="btn-hangup" onclick="hangUp()">❌ Raccrocher</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const myName = prompt("Entrez le nom de cette pièce / appareil (ex: Salon, Cuisine) :") || "Client_" + Math.floor(Math.random()*100);
+        document.getElementById('myRoomName').innerText = myName;
+
+        const statusDiv = document.getElementById('status');
+        const clientsList = document.getElementById('clientsList');
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+
+        let socket, localStream, peerConnection;
+        let currentTarget = null;
+
+        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        // 1. Connexion WebSocket
+        function connect() {
+            socket = new WebSocket('ws://localhost:8888', 'intercom-protocol');
+
+            socket.onopen = () => {
+                statusDiv.innerText = "Connecté. Enregistrement...";
+                // S'enregistrer auprès du serveur C
+                socket.send(JSON.stringify({ type: 'register', name: myName }));
+            };
+
+            socket.onmessage = async (event) => {
+                const msg = JSON.parse(event.data);
+
+                // Mise à jour de la liste des clients
+                if (msg.type === 'client_list') {
+                    clientsList.innerHTML = '';
+                    msg.clients.forEach(client => {
+                        if (client !== myName) {
+                            const li = document.createElement('li');
+                            li.innerHTML = `
+                                <span>${client}</span>
+                                <div>
+                                    <button class="btn-audio" onclick="startCall('${client}', 'audio')">📞</button>
+                                    <button class="btn-video" onclick="startCall('${client}', 'video')">📹</button>
+                                </div>
+                            `;
+                            clientsList.appendChild(li);
+                        }
+                    });
+                    if (clientsList.children.length === 0) {
+                        clientsList.innerHTML = '<li>Aucun autre appareil en ligne</li>';
+                    }
+                } 
+                // Gestion de la signalisation WebRTC entrante
+                else {
+                    if (!peerConnection) createPeerConnection(msg.sender);
+
+                    if (msg.sdp) {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                        if (msg.sdp.type === 'offer') {
+                            await initMedia(true);
+                            const answer = await peerConnection.createAnswer();
+                            await peerConnection.setLocalDescription(answer);
+                            socket.send(JSON.stringify({ type: 'answer', target: msg.sender, sender: myName, sdp: peerConnection.localDescription }));
+                            statusDiv.innerText = `En communication avec : ${msg.sender}`;
+                        }
+                    } else if (msg.candidate) {
+                        try {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                        } catch (e) { console.error(e); }
+                    }
+                }
+            };
+        }
+
+        // 2. Gestion des médias
+        async function initMedia(videoEnabled) {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: true });
+                localVideo.srcObject = localStream;
+            } catch (e) {
+                alert("Erreur d'accès micro/caméra");
+            }
+        }
+
+        // 3. Création de la connexion WebRTC
+        function createPeerConnection(target) {
+            currentTarget = target;
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            }
+
+            peerConnection.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
+            peerConnection.onicecandidate = (e) => {
+                if (e.candidate) {
+                    socket.send(JSON.stringify({ type: 'candidate', target: currentTarget, sender: myName, candidate: e.candidate }));
+                }
+            };
+        }
+
+        // 4. Lancer un appel vers un client spécifique
+        async function startCall(target, type) {
+            await initMedia(type === 'video');
+            createPeerConnection(target);
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            socket.send(JSON.stringify({ type: 'offer', target: target, sender: myName, sdp: peerConnection.localDescription }));
+            statusDiv.innerText = `Appel de ${target} en cours...`;
+        }
+
+        // 5. Raccrocher
+        function hangUp() {
+            if (peerConnection) { peerConnection.close(); peerConnection = null; }
+            if (localStream) { localStream.getTracks().forEach(t => t.stop()); }
+            localVideo.srcObject = null;
+            remoteVideo.srcObject = null;
+            statusDiv.innerText = "Connecté (Prêt)";
+        }
+
+        connect();
+    </script>
+</body>
+</html>
