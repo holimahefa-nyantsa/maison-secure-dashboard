@@ -2,168 +2,173 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Interphone Maison - Visioconférence</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maison Sécurisée - Dashboard</title>
+    <!-- Importation de la bibliothèque MQTT.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background: #f4f7f6; margin: 0; padding: 20px; }
-        .container { display: flex; gap: 20px; width: 100%; max-width: 900px; justify-content: center; }
-        .sidebar { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 250px; }
-        .video-box { display: flex; flex-direction: column; gap: 15px; }
-        video { width: 350px; height: 250px; background: #000; border-radius: 8px; border: 2px solid #ccc; }
-        ul { list-style: none; padding: 0; }
-        li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
-        button { border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; color: white; }
-        .btn-audio { background: #28a745; }
-        .btn-video { background: #007bff; }
-        .btn-hangup { background: #dc3545; margin-top: 10px; width: 100%; }
-        #status { font-weight: bold; margin-bottom: 15px; color: #555; }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 15px;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 1.5rem;
+        }
+        .status-badge {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: bold;
+            background-color: #e74c3c;
+            color: white;
+        }
+        .status-badge.connected {
+            background-color: #2ecc71;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .card h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.1rem;
+            color: #34495e;
+        }
+        .state {
+            font-size: 0.9rem;
+            padding: 5px 10px;
+            border-radius: 5px;
+            display: inline-block;
+            font-weight: bold;
+            background-color: #2ecc71;
+            color: white;
+        }
+        .state.alert {
+            background-color: #e74c3c;
+        }
+        .history {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .history h3 {
+            margin-top: 0;
+            font-size: 1.1rem;
+        }
+        #logList {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 150px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+        }
+        #logList li {
+            padding: 6px 0;
+            border-bottom: 1px solid #eee;
+        }
     </style>
 </head>
 <body>
 
-    <h1>Interphone - <span id="myRoomName"></span></h1>
-    <div id="status">Statut : Connexion...</div>
+    <h1>🔒 MAISON SECURE</h1>
+    <div id="connectionStatus" class="status-badge">Connexion au broker MQTT...</div>
 
-    <div class="container">
-        <!-- Liste dynamique des clients connectés -->
-        <div class="sidebar">
-            <h3>Appareils en ligne</h3>
-            <ul id="clientsList">
-                <li>Recherche...</li>
-            </ul>
+    <div class="grid">
+        <div class="card">
+            <h3>Entrée</h3>
+            <div id="state-entree" class="state">Normal</div>
         </div>
-
-        <!-- Flux vidéos -->
-        <div class="video-box">
-            <div>
-                <h4>Ma Caméra</h4>
-                <video id="localVideo" autoplay muted playsinline></video>
-            </div>
-            <div>
-                <h4>Correspondant</h4>
-                <video id="remoteVideo" autoplay playsinline></video>
-                <button class="btn-hangup" onclick="hangUp()">❌ Raccrocher</button>
-            </div>
+        <div class="card">
+            <h3>Salon</h3>
+            <div id="state-salon" class="state">Normal</div>
+        </div>
+        <div class="card">
+            <h3>Chambre</h3>
+            <div id="state-chambre" class="state">Normal</div>
+        </div>
+        <div class="card">
+            <h3>Couloir</h3>
+            <div id="state-couloir" class="state">Normal</div>
         </div>
     </div>
 
+    <div class="history">
+        <h3>Historique des événements</h3>
+        <ul id="logList">
+            <li>En attente d'événements...</li>
+        </ul>
+    </div>
+
     <script>
-        const myName = prompt("Entrez le nom de cette pièce / appareil (ex: Salon, Cuisine) :") || "Client_" + Math.floor(Math.random()*100);
-        document.getElementById('myRoomName').innerText = myName;
+        // Connexion au broker MQTT via WebSocket (port 8883 ou 9001 selon les brokers publics, ici wss://test.mosquitto.org)
+        const brokerUrl = 'wss://test.mosquitto.org:8081/mqtt';
+        const client = mqtt.connect(brokerUrl);
 
-        const statusDiv = document.getElementById('status');
-        const clientsList = document.getElementById('clientsList');
-        const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
+        const topics = {
+            'nyantsa/maison/entree': 'state-entree',
+            'nyantsa/maison/salon': 'state-salon',
+            'nyantsa/maison/chambre': 'state-chambre',
+            'nyantsa/maison/couloir': 'state-couloir'
+        };
 
-        let socket, localStream, peerConnection;
-        let currentTarget = null;
+        client.on('connect', () => {
+            const statusDiv = document.getElementById('connectionStatus');
+            statusDiv.textContent = 'Système Connecté au Cloud MQTT';
+            statusDiv.classList.add('connected');
 
-        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            // S'abonner aux 4 topics des pièces
+            Object.keys(topics).forEach(topic => {
+                client.subscribe(topic, (err) => {
+                    if (!err) console.log(`Abonné à ${topic}`);
+                });
+            });
+        });
 
-        // 1. Connexion WebSocket
-        function connect() {
-            socket = new WebSocket('ws://localhost:8888', 'intercom-protocol');
+        client.on('message', (topic, payload) => {
+            const message = payload.toString();
+            const elementId = topics[topic];
+            
+            if (elementId) {
+                const badge = document.getElementById(elementId);
+                const zoneName = badge.parentElement.querySelector('h3').textContent;
+                const now = new Date().toLocaleTimeString();
 
-            socket.onopen = () => {
-                statusDiv.innerText = "Connecté. Enregistrement...";
-                // S'enregistrer auprès du serveur C
-                socket.send(JSON.stringify({ type: 'register', name: myName }));
-            };
-
-            socket.onmessage = async (event) => {
-                const msg = JSON.parse(event.data);
-
-                // Mise à jour de la liste des clients
-                if (msg.type === 'client_list') {
-                    clientsList.innerHTML = '';
-                    msg.clients.forEach(client => {
-                        if (client !== myName) {
-                            const li = document.createElement('li');
-                            li.innerHTML = `
-                                <span>${client}</span>
-                                <div>
-                                    <button class="btn-audio" onclick="startCall('${client}', 'audio')">📞</button>
-                                    <button class="btn-video" onclick="startCall('${client}', 'video')">📹</button>
-                                </div>
-                            `;
-                            clientsList.appendChild(li);
-                        }
-                    });
-                    if (clientsList.children.length === 0) {
-                        clientsList.innerHTML = '<li>Aucun autre appareil en ligne</li>';
-                    }
-                } 
-                // Gestion de la signalisation WebRTC entrante
-                else {
-                    if (!peerConnection) createPeerConnection(msg.sender);
-
-                    if (msg.sdp) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-                        if (msg.sdp.type === 'offer') {
-                            await initMedia(true);
-                            const answer = await peerConnection.createAnswer();
-                            await peerConnection.setLocalDescription(answer);
-                            socket.send(JSON.stringify({ type: 'answer', target: msg.sender, sender: myName, sdp: peerConnection.localDescription }));
-                            statusDiv.innerText = `En communication avec : ${msg.sender}`;
-                        }
-                    } else if (msg.candidate) {
-                        try {
-                            await peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-                        } catch (e) { console.error(e); }
-                    }
+                if (message.includes('ALERTE')) {
+                    badge.textContent = 'Mouvement';
+                    badge.classList.add('alert');
+                } else {
+                    badge.textContent = 'Normal';
+                    badge.classList.remove('alert');
                 }
-            };
-        }
 
-        // 2. Gestion des médias
-        async function initMedia(videoEnabled) {
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: videoEnabled, audio: true });
-                localVideo.srcObject = localStream;
-            } catch (e) {
-                alert("Erreur d'accès micro/caméra");
-            }
-        }
-
-        // 3. Création de la connexion WebRTC
-        function createPeerConnection(target) {
-            currentTarget = target;
-            peerConnection = new RTCPeerConnection(rtcConfig);
-
-            if (localStream) {
-                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            }
-
-            peerConnection.ontrack = (e) => { remoteVideo.srcObject = e.streams[0]; };
-            peerConnection.onicecandidate = (e) => {
-                if (e.candidate) {
-                    socket.send(JSON.stringify({ type: 'candidate', target: currentTarget, sender: myName, candidate: e.candidate }));
+                // Ajouter à l'historique
+                const logList = document.getElementById('logList');
+                if (logList.children.length === 1 && logList.children[0].textContent.includes("En attente")) {
+                    logList.innerHTML = '';
                 }
-            };
-        }
-
-        // 4. Lancer un appel vers un client spécifique
-        async function startCall(target, type) {
-            await initMedia(type === 'video');
-            createPeerConnection(target);
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            socket.send(JSON.stringify({ type: 'offer', target: target, sender: myName, sdp: peerConnection.localDescription }));
-            statusDiv.innerText = `Appel de ${target} en cours...`;
-        }
-
-        // 5. Raccrocher
-        function hangUp() {
-            if (peerConnection) { peerConnection.close(); peerConnection = null; }
-            if (localStream) { localStream.getTracks().forEach(t => t.stop()); }
-            localVideo.srcObject = null;
-            remoteVideo.srcObject = null;
-            statusDiv.innerText = "Connecté (Prêt)";
-        }
-
-        connect();
+                const li = document.createElement('li');
+                li.textContent = `[${now}] ${zoneName} : ${message}`;
+                logList.insertBefore(li, logList.firstChild);
+            }
+        });
     </script>
+
 </body>
 </html>
