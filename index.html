@@ -31,6 +31,28 @@
         .status-badge.connected {
             background-color: #2ecc71;
         }
+        .control-panel {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn.disarm {
+            background-color: #e74c3c;
+        }
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -90,6 +112,13 @@
     <h1>🔒 MAISON SECURE</h1>
     <div id="connectionStatus" class="status-badge">Connexion au broker MQTT...</div>
 
+    <!-- Panneau de commande interactif -->
+    <div class="control-panel">
+        <h3>Contrôle de l'Alarme</h3>
+        <button class="btn" onclick="envoyerCommande('ARMER')">Activer l'Alarme</button>
+        <button class="btn disarm" onclick="envoyerCommande('DESARMER')">Couper l'Alarme</button>
+    </div>
+
     <div class="grid">
         <div class="card">
             <h3>Entrée</h3>
@@ -117,7 +146,6 @@
     </div>
 
     <script>
-        // Connexion au broker MQTT via WebSocket (port 8883 ou 9001 selon les brokers publics, ici wss://test.mosquitto.org)
         const brokerUrl = 'wss://test.mosquitto.org:8081/mqtt';
         const client = mqtt.connect(brokerUrl);
 
@@ -133,13 +161,18 @@
             statusDiv.textContent = 'Système Connecté au Cloud MQTT';
             statusDiv.classList.add('connected');
 
-            // S'abonner aux 4 topics des pièces
             Object.keys(topics).forEach(topic => {
                 client.subscribe(topic, (err) => {
                     if (!err) console.log(`Abonné à ${topic}`);
                 });
             });
         });
+
+        // Fonction pour envoyer des ordres à l'ESP32
+        function envoyerCommande(action) {
+            client.publish('nyantsa/maison/commande', action);
+            console.log("Commande envoyée : " + action);
+        }
 
         client.on('message', (topic, payload) => {
             const message = payload.toString();
@@ -158,7 +191,6 @@
                     badge.classList.remove('alert');
                 }
 
-                // Ajouter à l'historique
                 const logList = document.getElementById('logList');
                 if (logList.children.length === 1 && logList.children[0].textContent.includes("En attente")) {
                     logList.innerHTML = '';
