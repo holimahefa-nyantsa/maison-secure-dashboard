@@ -1,206 +1,488 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Maison Sécurisée - Dashboard</title>
-    <!-- Importation de la bibliothèque MQTT.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f7f6;
-            margin: 0;
-            padding: 15px;
-            color: #333;
-        }
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-            font-size: 1.5rem;
-        }
-        .status-badge {
-            text-align: center;
-            padding: 10px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            font-weight: bold;
-            background-color: #e74c3c;
-            color: white;
-        }
-        .status-badge.connected {
-            background-color: #2ecc71;
-        }
-        .control-panel {
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .btn {
-            background-color: #2ecc71;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 1rem;
-            font-weight: bold;
-            border-radius: 5px;
-            cursor: pointer;
-            margin: 5px;
-        }
-        .btn.disarm {
-            background-color: #e74c3c;
-        }
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .card {
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        .card h3 {
-            margin: 0 0 10px 0;
-            font-size: 1.1rem;
-            color: #34495e;
-        }
-        .state {
-            font-size: 0.9rem;
-            padding: 5px 10px;
-            border-radius: 5px;
-            display: inline-block;
-            font-weight: bold;
-            background-color: #2ecc71;
-            color: white;
-        }
-        .state.alert {
-            background-color: #e74c3c;
-        }
-        .history {
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-        .history h3 {
-            margin-top: 0;
-            font-size: 1.1rem;
-        }
-        #logList {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            max-height: 150px;
-            overflow-y: auto;
-            font-size: 0.85rem;
-        }
-        #logList li {
-            padding: 6px 0;
-            border-bottom: 1px solid #eee;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alarme Multi-Zones - Supervision MQTT</title>
+  <script src="https://unpkg.com/mqtt@5.10.5/dist/mqtt.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #12151c;
+      color: #f1f5f9;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 820px;
+      margin: 0 auto;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: #1e2430;
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+    }
+    .mqtt-panel {
+      background: #1e2430;
+      padding: 14px 18px;
+      border-radius: 10px;
+      margin-bottom: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-bottom: 4px;
+    }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f131a;
+      color: #f8fafc;
+      font-size: 13px;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: bold;
+      font-size: 13px;
+      margin-right: 6px;
+    }
+    .arme { background: #14532d; color: #86efac; }
+    .desarme { background: #7f1d1d; color: #fca5a5; }
+    .mqtt-off { background: #334155; color: #e2e8f0; }
+    .mqtt-ok { background: #0f766e; color: #99f6e4; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-toggle { background: #2563eb; color: white; }
+    .btn-notif { background: #0f766e; color: white; }
+    .btn-mqtt { background: #7c3aed; color: white; }
+    .btn-test { background: #334155; color: #f8fafc; margin-top: 8px; }
+    .btn-clear { background: #475569; color: white; font-size: 12px; padding: 6px 10px; }
+    .banner-alerte {
+      display: none;
+      background: #7f1d1d;
+      border: 2px solid #ef4444;
+      color: #fef2f2;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-weight: bold;
+    }
+    .banner-alerte.visible {
+      display: block;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .zone-card {
+      background: #1e2430;
+      border: 2px solid #2d3748;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .zone-card.alerte {
+      border-color: #ef4444;
+      background: #3b1319;
+    }
+    .zone-title { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+    .zone-state { font-size: 13px; color: #cbd5e1; }
+    .log-box {
+      background: #1e2430;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      max-height: 240px;
+      overflow-y: auto;
+    }
+    li {
+      padding: 8px 10px;
+      border-bottom: 1px solid #2d3748;
+      font-size: 14px;
+    }
+    li.critique { color: #fca5a5; font-weight: bold; }
+    .small-hint { font-size: 12px; color: #94a3b8; margin-top: 6px; }
+  </style>
 </head>
 <body>
-
-    <h1>🔒 MAISON SECURE</h1>
-    <div id="connectionStatus" class="status-badge">Connexion au broker MQTT...</div>
-
-    <!-- Panneau de commande interactif -->
-    <div class="control-panel">
-        <h3>Contrôle de l'Alarme</h3>
-        <button class="btn" onclick="envoyerCommande('ARMER')">Activer l'Alarme</button>
-        <button class="btn disarm" onclick="envoyerCommande('DESARMER')">Couper l'Alarme</button>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h2 style="margin: 0 0 6px 0;">Alarme Sécurité - Tableau Web MQTT</h2>
+        <span id="badge-etat" class="status-badge arme">DÉTECTION ACTIVÉE</span>
+        <span id="badge-mqtt" class="status-badge mqtt-off">MQTT : DÉCONNECTÉ</span>
+        <div id="notif-status" class="small-hint">Notifications navigateur : non demandées</div>
+      </div>
+      <div class="controls">
+        <button id="btn-notif" class="btn-notif" onclick="demanderPermissionNotif()">Activer notifications</button>
+        <button id="btn-armement" class="btn-toggle" onclick="basculerArmement()">Désactiver détection</button>
+      </div>
     </div>
+
+    <div class="mqtt-panel">
+      <div>
+        <label for="mqtt-url">URL Broker WebSocket (wss://)</label>
+        <input id="mqtt-url" type="text" value="wss://broker.hivemq.com:8884/mqtt" />
+      </div>
+      <div>
+        <label for="mqtt-prefix">Préfixe topics</label>
+        <input id="mqtt-prefix" type="text" value="maison/ny-alarme" />
+      </div>
+      <div>
+        <label for="mqtt-user">Utilisateur (optionnel)</label>
+        <input id="mqtt-user" type="text" placeholder="Optionnel" />
+      </div>
+      <div>
+        <label for="mqtt-pass">Mot de passe (optionnel)</label>
+        <input id="mqtt-pass" type="password" placeholder="Optionnel" />
+      </div>
+      <div>
+        <button id="btn-mqtt" class="btn-mqtt" onclick="toggleConnexionMqtt()">Connecter MQTT</button>
+      </div>
+    </div>
+
+    <div id="banner-alerte" class="banner-alerte"></div>
 
     <div class="grid">
-        <div class="card">
-            <h3>Entrée</h3>
-            <div id="state-entree" class="state">Normal</div>
-        </div>
-        <div class="card">
-            <h3>Salon</h3>
-            <div id="state-salon" class="state">Normal</div>
-        </div>
-        <div class="card">
-            <h3>Chambre</h3>
-            <div id="state-chambre" class="state">Normal</div>
-        </div>
-        <div class="card">
-            <h3>Couloir</h3>
-            <div id="state-couloir" class="state">Normal</div>
-        </div>
+      <div id="card-entree" class="zone-card">
+        <div class="zone-title">Zone 1 : Porte d'entrée</div>
+        <div id="state-entree" class="zone-state">État : Fermée / RAS</div>
+        <button class="btn-test" onclick="simulerEvenement('entree', \"Porte d'entrée\", 'Porte ouverte')">Simuler ouverture</button>
+      </div>
+
+      <div id="card-salon" class="zone-card">
+        <div class="zone-title">Zone 2 : Salon</div>
+        <div id="state-salon" class="zone-state">État : Aucun mouvement</div>
+        <button class="btn-test" onclick="simulerEvenement('salon', 'Salon', 'Mouvement détecté')">Simuler mouvement</button>
+      </div>
+
+      <div id="card-chambre" class="zone-card">
+        <div class="zone-title">Zone 3 : Chambre</div>
+        <div id="state-chambre" class="zone-state">État : RAS (PIR + Fenêtre)</div>
+        <button class="btn-test" onclick="simulerEvenement('chambre', 'Chambre', 'Mouvement ou fenêtre détecté')">Simuler alerte</button>
+      </div>
+
+      <div id="card-couloir" class="zone-card">
+        <div class="zone-title">Zone 4 : Couloir</div>
+        <div id="state-couloir" class="zone-state">État : Aucun mouvement</div>
+        <button class="btn-test" onclick="simulerEvenement('couloir', 'Couloir', 'Mouvement détecté')">Simuler mouvement</button>
+      </div>
     </div>
 
-    <div class="history">
-        <h3>Historique des événements</h3>
-        <ul id="logList">
-            <li>En attente d'événements...</li>
-        </ul>
+    <div class="log-box">
+      <div class="log-header">
+        <strong>Journal des alertes en direct</strong>
+        <button class="btn-clear" onclick="effacerJournal()">Effacer</button>
+      </div>
+      <ul id="journal"></ul>
     </div>
+  </div>
 
-    <script>
-        const brokerUrl = 'wss://test.mosquitto.org:8081/mqtt';
-        const client = mqtt.connect(brokerUrl);
+  <script>
+    let detectionActive = true;
+    let audioCtx = null;
+    let mqttClient = null;
+    const clientId = "web-alarme-" + Math.random().toString(16).slice(2, 10);
 
-        const topics = {
-            'nyantsa/maison/entree': 'state-entree',
-            'nyantsa/maison/salon': 'state-salon',
-            'nyantsa/maison/chambre': 'state-chambre',
-            'nyantsa/maison/couloir': 'state-couloir'
-        };
+    const ZONES_META = {
+      entree: { nom: "Porte d'entrée", defaut: "État : Fermée / RAS", detailDefaut: "Porte ouverte" },
+      salon: { nom: "Salon", defaut: "État : Aucun mouvement", detailDefaut: "Mouvement détecté" },
+      chambre: { nom: "Chambre", defaut: "État : RAS (PIR + Fenêtre)", detailDefaut: "Mouvement ou fenêtre détecté" },
+      couloir: { nom: "Couloir", defaut: "État : Aucun mouvement", detailDefaut: "Mouvement détecté" }
+    };
 
-        client.on('connect', () => {
-            const statusDiv = document.getElementById('connectionStatus');
-            statusDiv.textContent = 'Système Connecté au Cloud MQTT';
-            statusDiv.classList.add('connected');
+    function getPrefix() {
+      return document.getElementById("mqtt-prefix").value.trim().replace(/\/+$/, "");
+    }
 
-            Object.keys(topics).forEach(topic => {
-                client.subscribe(topic, (err) => {
-                    if (!err) console.log(`Abonné à ${topic}`);
-                });
-            });
+    function setBadgeMqtt(connecte, texte) {
+      const badge = document.getElementById("badge-mqtt");
+      const btn = document.getElementById("btn-mqtt");
+      badge.textContent = texte;
+      badge.className = connecte ? "status-badge mqtt-ok" : "status-badge mqtt-off";
+      btn.textContent = connecte ? "Déconnecter MQTT" : "Connecter MQTT";
+    }
+
+    function toggleConnexionMqtt() {
+      if (mqttClient) {
+        mqttClient.end(true);
+        mqttClient = null;
+        setBadgeMqtt(false, "MQTT : DÉCONNECTÉ");
+        ajouterLog("Connexion MQTT fermée.");
+        return;
+      }
+
+      const url = document.getElementById("mqtt-url").value.trim();
+      const prefix = getPrefix();
+      const username = document.getElementById("mqtt-user").value.trim();
+      const password = document.getElementById("mqtt-pass").value;
+
+      if (!url || !prefix) {
+        ajouterLog("Veuillez renseigner l'URL WebSocket et le préfixe de topic.");
+        return;
+      }
+
+      setBadgeMqtt(false, "MQTT : CONNEXION...");
+      const options = {
+        clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 3000,
+        keepalive: 30
+      };
+      if (username) options.username = username;
+      if (password) options.password = password;
+
+      mqttClient = mqtt.connect(url, options);
+
+      mqttClient.on("connect", () => {
+        setBadgeMqtt(true, "MQTT : CONNECTÉ");
+        const subZones = `${prefix}/zones/#`;
+        const subEtat = `${prefix}/etat`;
+        mqttClient.subscribe([subZones, subEtat], (err) => {
+          if (!err) {
+            ajouterLog(`Connecté au broker MQTT (${url}). Abonné à ${subZones} et ${subEtat}.`);
+          }
         });
+      });
 
-        // Fonction pour envoyer des ordres à l'ESP32
-        function envoyerCommande(action) {
-            client.publish('nyantsa/maison/commande', action);
-            console.log("Commande envoyée : " + action);
+      mqttClient.on("reconnect", () => {
+        setBadgeMqtt(false, "MQTT : RECONNEXION...");
+      });
+
+      mqttClient.on("error", (err) => {
+        ajouterLog(`Erreur MQTT : ${err.message || err}`);
+      });
+
+      mqttClient.on("close", () => {
+        if (mqttClient) {
+          setBadgeMqtt(false, "MQTT : DÉCONNECTÉ");
+        }
+      });
+
+      mqttClient.on("message", (topic, payload) => {
+        const raw = payload.toString().trim();
+        traiterMessageMqtt(topic, raw, prefix);
+      });
+    }
+
+    function traiterMessageMqtt(topic, raw, prefix) {
+      if (topic === `${prefix}/etat`) {
+        const etatUpper = raw.toUpperCase();
+        const futurEtat = etatUpper === "ARME" || etatUpper === "ACTIF" || etatUpper === "ON" || etatUpper === "1";
+        appliquerEtatArmement(futurEtat, false);
+        return;
+      }
+
+      const zonesPrefix = `${prefix}/zones/`;
+      if (topic.startsWith(zonesPrefix)) {
+        const zoneSlug = topic.slice(zonesPrefix.length).split("/")[0];
+        const meta = ZONES_META[zoneSlug];
+        if (!meta) return;
+
+        let detail = raw || meta.detailDefaut;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.evenement) detail = parsed.evenement;
+        } catch (_) {}
+
+        traiterAlerteZone(zoneSlug, meta.nom, detail);
+      }
+    }
+
+    function mettreAJourEtatNotif() {
+      const el = document.getElementById("notif-status");
+      const btn = document.getElementById("btn-notif");
+      if (!("Notification" in window)) {
+        el.textContent = "Notifications navigateur : non prises en charge ici (bandeau actif)";
+        btn.disabled = true;
+        return;
+      }
+      if (Notification.permission === "granted") {
+        el.textContent = "Notifications navigateur : activées";
+        btn.textContent = "Notifications actives";
+      } else if (Notification.permission === "denied") {
+        el.textContent = "Notifications navigateur : bloquées dans le navigateur (bandeau actif)";
+      } else {
+        el.textContent = "Notifications navigateur : en attente d'autorisation";
+      }
+    }
+
+    async function demanderPermissionNotif() {
+      if (!("Notification" in window)) {
+        mettreAJourEtatNotif();
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      mettreAJourEtatNotif();
+      ajouterLog(
+        permission === "granted"
+          ? "Notifications navigateur autorisées."
+          : "Notifications navigateur non autorisées : le bandeau d'alerte reste actif."
+      );
+    }
+
+    function jouerAlerteSonore() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        if (!audioCtx) {
+          audioCtx = new AudioContextClass();
+        }
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume();
         }
 
-        client.on('message', (topic, payload) => {
-            const message = payload.toString();
-            const elementId = topics[topic];
-            
-            if (elementId) {
-                const badge = document.getElementById(elementId);
-                const zoneName = badge.parentElement.querySelector('h3').textContent;
-                const now = new Date().toLocaleTimeString();
+        const maintenant = audioCtx.currentTime;
+        const bips = [0, 0.25, 0.5];
+        bips.forEach((offset, idx) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(idx % 2 === 0 ? 880 : 660, maintenant + offset);
 
-                if (message.includes('ALERTE')) {
-                    badge.textContent = 'Mouvement';
-                    badge.classList.add('alert');
-                } else {
-                    badge.textContent = 'Normal';
-                    badge.classList.remove('alert');
-                }
+          gain.gain.setValueAtTime(0.001, maintenant + offset);
+          gain.gain.exponentialRampToValueAtTime(0.18, maintenant + offset + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, maintenant + offset + 0.2);
 
-                const logList = document.getElementById('logList');
-                if (logList.children.length === 1 && logList.children[0].textContent.includes("En attente")) {
-                    logList.innerHTML = '';
-                }
-                const li = document.createElement('li');
-                li.textContent = `[${now}] ${zoneName} : ${message}`;
-                logList.insertBefore(li, logList.firstChild);
-            }
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(maintenant + offset);
+          osc.stop(maintenant + offset + 0.21);
         });
-    </script>
+      } catch (err) {
+        console.warn("Alerte sonore impossible :", err);
+      }
+    }
 
+    function afficherNotificationNavigateur(titre, corps) {
+      const banner = document.getElementById("banner-alerte");
+      banner.textContent = `${titre} — ${corps}`;
+      banner.classList.add("visible");
+      setTimeout(() => {
+        banner.classList.remove("visible");
+      }, 5000);
+
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification(titre, { body: corps, tag: "alarme-intrusion" });
+        } catch (err) {
+          console.warn("Erreur notification navigateur :", err);
+        }
+      }
+    }
+
+    function ajouterLog(texte, critique = false) {
+      const ul = document.getElementById("journal");
+      const li = document.createElement("li");
+      const heure = new Date().toLocaleTimeString("fr-FR");
+      if (critique) li.className = "critique";
+      li.textContent = `[${heure}] ${texte}`;
+      ul.prepend(li);
+    }
+
+    function appliquerEtatArmement(futurEtat, publierCommande) {
+      detectionActive = futurEtat;
+      const badge = document.getElementById("badge-etat");
+      const btn = document.getElementById("btn-armement");
+
+      if (detectionActive) {
+        badge.textContent = "DÉTECTION ACTIVÉE";
+        badge.className = "status-badge arme";
+        btn.textContent = "Désactiver détection";
+        ajouterLog("Système armé : surveillance active sur toutes les zones.");
+      } else {
+        badge.textContent = "DÉTECTION DÉSACTIVÉE";
+        badge.className = "status-badge desarme";
+        btn.textContent = "Activer détection";
+        document.querySelectorAll(".zone-card").forEach(c => c.classList.remove("alerte"));
+        document.getElementById("banner-alerte").classList.remove("visible");
+        ajouterLog("Système désarmé : détections suspendues.");
+      }
+
+      if (publierCommande && mqttClient && mqttClient.connected) {
+        const prefix = getPrefix();
+        const commande = detectionActive ? "ARMER" : "DESARMER";
+        mqttClient.publish(`${prefix}/commande`, commande);
+        ajouterLog(`Commande MQTT envoyée sur ${prefix}/commande : ${commande}`);
+      }
+    }
+
+    function basculerArmement() {
+      appliquerEtatArmement(!detectionActive, true);
+    }
+
+    function traiterAlerteZone(zoneId, nomZone, detail) {
+      if (!detectionActive) {
+        ajouterLog(`Événement ignoré (${nomZone} : ${detail}) — détection désactivée.`);
+        return;
+      }
+
+      const card = document.getElementById("card-" + zoneId);
+      const state = document.getElementById("state-" + zoneId);
+      if (!card || !state) return;
+
+      card.classList.add("alerte");
+      state.textContent = `ALERTE : ${detail}`;
+
+      const messageAlerte = `ALERTE INTRUSION - ${nomZone} : ${detail}`;
+      ajouterLog(messageAlerte, true);
+      jouerAlerteSonore();
+      afficherNotificationNavigateur(`Intrusion : ${nomZone}`, detail);
+
+      setTimeout(() => {
+        card.classList.remove("alerte");
+        state.textContent = ZONES_META[zoneId]?.defaut || "État : Retour au calme";
+      }, 5000);
+    }
+
+    function simulerEvenement(zoneId, nomZone, detail) {
+      traiterAlerteZone(zoneId, nomZone, detail);
+    }
+
+    function effacerJournal() {
+      document.getElementById("journal").innerHTML = "";
+    }
+
+    mettreAJourEtatNotif();
+    ajouterLog("Interface web MQTT initialisée.");
+  </script>
 </body>
 </html>
