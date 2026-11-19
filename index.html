@@ -565,17 +565,19 @@
         document.getElementById('mqttLabel').textContent = 'Hors ligne';
     });
 
-    client.on('message', (topic, payload) => {
-        const message = payload.toString();
-        const info = capteurs[topic];
-        if (!info) return;
+   client.on('message', (topic, payload) => {
+  if (!systemeArme) return; // Aucune réaction sur le dashboard quand désarmé
 
-        const estEnAlerte = message.toUpperCase().includes('ALERTE');
-        info.alerte = estEnAlerte;
+  const message = payload.toString();
+  const info = capteurs[topic];
+  if (!info) return;
 
-        mettreAJourInterface();
-        ajouterLog(`${info.nom} : ${message}`, estEnAlerte);
-    });
+  const estEnAlerte = message.toUpperCase().includes('ALERTE');
+  info.alerte = estEnAlerte;
+
+  mettreAJourInterface();
+  ajouterLog(`${info.nom} : ${message}`, estEnAlerte);
+});
 
     function basculerAlarme() {
         if (systemeArme) {
